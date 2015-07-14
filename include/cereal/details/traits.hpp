@@ -823,7 +823,7 @@ namespace cereal
                                                                                                                              \
         template <class TT, class AA>                                                                                        \
         static auto test3(int) -> decltype( CEREAL_LOAD_MINIMAL_FUNCTION_NAME(                                               \
-              std::declval<AA const &>(), NoConvertRef<TT>(), AnyConvert() versioned ), yes() );                             \
+              std::declval<AA const &>(), std::declval<TT&>(), AnyConvert() versioned ), yes() );                            \
         template <class, class> static no test3( ... );                                                                      \
         static const bool const_valid = std::is_same<decltype( test3<T, A>( 0 ) ), yes>::value;                              \
       };                                                                                                                     \
