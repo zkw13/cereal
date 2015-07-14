@@ -69,6 +69,8 @@ namespace cereal
   /*! @relates NameValuePair
       @ingroup Utility */
   #define CEREAL_NVP(T) ::cereal::make_nvp(#T, T)
+  #define CEREAL_ONVP(O,N) ::cereal::make_nvp(#N, O.N)
+  #define CEREAL_PNVP(P,N) ::cereal::make_nvp(#N, P ## N)
 
   // ######################################################################
   //! Convenience function to create binary data for both const and non const pointers
