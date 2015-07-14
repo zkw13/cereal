@@ -411,7 +411,7 @@ namespace cereal
     // Determines if the type is valid for use with a minimal serialize function
     template <class T>
     struct is_minimal_type : std::integral_constant<bool,
-      detail::is_string<T>::value || std::is_arithmetic<T>::value> {};
+      detail::is_string<T>::value || std::is_arithmetic<T>::value || std::is_enum<T>::value> {};
 
     // ######################################################################
     //! Creates implementation details for whether a member save_minimal function exists
