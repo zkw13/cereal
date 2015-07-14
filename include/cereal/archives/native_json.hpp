@@ -32,6 +32,7 @@
 #include <cereal/archives/json.hpp>
 
 #include <map>
+#include <type_traits>
 
 namespace cereal
 {
@@ -693,6 +694,18 @@ namespace cereal
            || std::is_enum<std::decay_t<T>>::value
            ;
      };
+     template <typename T>
+     struct is_scalar_or_minimal
+     {
+        static constexpr bool value = is_scalar<T>::value
+           || has_minimal_input_serialization<std::decay_t<T>, NativeJSONInputArchive>::value
+           || has_minimal_output_serialization<std::decay_t<T>, NativeJSONOutputArchive>::value
+           ;
+
+        static_assert(has_minimal_input_serialization<std::decay_t<T>, NativeJSONInputArchive>::value
+           == has_minimal_output_serialization<std::decay_t<T>, NativeJSONOutputArchive>::value,
+           "has_minimal_{in,out}put_serialization must agree");
+     };
   };
 
 
@@ -702,25 +715,25 @@ namespace cereal
 
   // ######################################################################
   //! Prologue for NVPs for JSON archives
-  template <class T, traits::DisableIf<traits::is_scalar<T>::value> = traits::sfinae> inline
+  template <class T, traits::DisableIf<traits::is_scalar_or_minimal<T>::value> = traits::sfinae> inline
   void prologue( NativeJSONOutputArchive &ar, NameValuePair<T> const & t )
   { }
 
   //! Prologue for NVPs for JSON archives
-  template <class T, traits::DisableIf<traits::is_scalar<T>::value> = traits::sfinae> inline
+  template <class T, traits::DisableIf<traits::is_scalar_or_minimal<T>::value> = traits::sfinae> inline
   void prologue( NativeJSONInputArchive & ar, NameValuePair<T> const & t )
   { }
 
   // ######################################################################
   //! Epilogue for NVPs for JSON archives
   /*! NVPs do not start or finish nodes - they just set up the names */
-  template <class T, traits::DisableIf<traits::is_scalar<T>::value> = traits::sfinae> inline
+  template <class T, traits::DisableIf<traits::is_scalar_or_minimal<T>::value> = traits::sfinae> inline
   void epilogue( NativeJSONOutputArchive & ar, NameValuePair<T> const & )
   { ar.finishNode(); }
 
   //! Epilogue for NVPs for JSON archives
   /*! NVPs do not start or finish nodes - they just set up the names */
-  template <class T, traits::DisableIf<traits::is_scalar<T>::value> = traits::sfinae> inline
+  template <class T, traits::DisableIf<traits::is_scalar_or_minimal<T>::value> = traits::sfinae> inline
   void epilogue( NativeJSONInputArchive & ar, NameValuePair<T> const & )
   { ar.finishNode(); }
 
@@ -784,7 +797,7 @@ namespace cereal
   void CEREAL_SAVE_FUNCTION_NAME( NativeJSONOutputArchive & ar, NameValuePair<T> const & t )
   {
     ar.setNextName( t.name );
-    if (!traits::is_scalar<T>::value)
+    if (!traits::is_scalar_or_minimal<T>::value)
        ar.startNode();
     ar( t.value );
   }
@@ -793,7 +806,7 @@ namespace cereal
   void CEREAL_LOAD_FUNCTION_NAME( NativeJSONInputArchive & ar, NameValuePair<T> & t )
   {
     ar.setNextName( t.name );
-    if (!traits::is_scalar<T>::value)
+    if (!traits::is_scalar_or_minimal<T>::value)
        ar.startNode();
     ar( t.value );
   }
