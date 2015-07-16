@@ -63,7 +63,7 @@ namespace cereal
       \ingroup Archives */
   class NativeJSONOutputArchive : public OutputArchive<NativeJSONOutputArchive>, public traits::TextArchive
   {
-    enum class NodeType { StartObject, InObject, StartArray, InArray };
+    enum class NodeType { StartObject, InObject, InArray };
 
     typedef rapidjson::GenericWriteStream WriteStream;
     typedef rapidjson::PrettyWriter<WriteStream> JSONWriter;
@@ -129,8 +129,11 @@ namespace cereal
       //! Destructor, flushes the JSON
       ~NativeJSONOutputArchive()
       {
-        if (itsNodeStack.top() == NodeType::InObject)
-          itsWriter.EndObject();
+        for (; !itsNodeStack.empty(); itsNodeStack.pop())
+          if (itsNodeStack.top() == NodeType::InObject)
+            itsWriter.EndObject();
+          else if (itsNodeStack.top() == NodeType::InArray)
+            itsWriter.EndArray();
       }
 
       //! Saves some binary data, encoded as a base64 string, with an optional name
@@ -173,8 +176,6 @@ namespace cereal
         // We'll also end any object/arrays we happen to be in
         switch(itsNodeStack.top())
         {
-          case NodeType::StartArray:
-            itsWriter.StartArray();
           case NodeType::InArray:
             itsWriter.EndArray();
             break;
@@ -187,6 +188,33 @@ namespace cereal
 
         itsNodeStack.pop();
         itsNameCounter.pop();
+      }
+
+      void maybeStartNodeInArray()
+      {
+        if (itsNodeStack.top() == NodeType::InArray)
+          startNode();
+      }
+
+      void maybeFinishNodeInArray()
+      {
+        // Peek at the parent node.  Currently this is a bit ugly.
+        // Probably better to move to use a deque here rather than a
+        // pure stack (which is simply an interface constraint on deque
+        // anyway) to support this without the pop/restore gymnastics.
+        if (itsNodeStack.size() <= 1)
+          return;
+        auto top = itsNodeStack.top();
+        itsNodeStack.pop();
+        bool parentIsArray = itsNodeStack.top() == NodeType::InArray;
+        itsNodeStack.push(top);
+        if (parentIsArray)
+          finishNode();
+      }
+
+      bool isInArray()
+      {
+        return itsNodeStack.top() == NodeType::InArray;
       }
 
       //! Sets the name for the next node created with startNode
@@ -286,13 +314,8 @@ namespace cereal
       {
         NodeType const & nodeType = itsNodeStack.top();
 
-        // Start up either an object or an array, depending on state
-        if(nodeType == NodeType::StartArray)
-        {
-          itsWriter.StartArray();
-          itsNodeStack.top() = NodeType::InArray;
-        }
-        else if(nodeType == NodeType::StartObject)
+        // Start up an object if necessary
+        if(nodeType == NodeType::StartObject)
         {
           itsNodeStack.top() = NodeType::InObject;
           itsWriter.StartObject();
@@ -313,10 +336,11 @@ namespace cereal
         }
       }
 
-      //! Designates that the current node should be output as an array, not an object
-      void makeArray()
+      //! Make the current node an array type and open it
+      void startArray()
       {
-        itsNodeStack.top() = NodeType::StartArray;
+        itsWriter.StartArray();
+        itsNodeStack.top() = NodeType::InArray;
       }
 
       //! @}
@@ -386,7 +410,10 @@ namespace cereal
         itsReadStream(stream)
       {
         itsDocument.ParseStream<0>(itsReadStream);
-        itsIteratorStack.emplace_back(itsDocument.MemberBegin(), itsDocument.MemberEnd());
+        if(itsDocument.IsArray())
+          itsIteratorStack.emplace_back(itsDocument.Begin(), itsDocument.End());
+        else
+          itsIteratorStack.emplace_back(itsDocument.MemberBegin(), itsDocument.MemberEnd());
       }
 
       //! Loads some binary data, encoded as a base64 string
@@ -440,6 +467,16 @@ namespace cereal
             return *this;
           }
 
+          //! For a value iterator over an array, return the number of
+          //  values present in the JSON array.  Returns 0 for
+          //  non-array types.
+          size_type arraySize() const
+          {
+            if (itsType != Value)
+               return 0;
+            return itsValueItEnd - itsValueItBegin;
+          }
+
           //! Get the value of the current node
           GenericValue const & value()
           {
@@ -464,6 +501,8 @@ namespace cereal
           /*! @throws Exception if no such named node exists */
           inline void search( const char * searchName )
           {
+            if( itsType == Value )
+               return;
             const auto len = std::strlen( searchName );
             size_t index = 0;
             for( auto it = itsMemberItBegin; it != itsMemberItEnd; ++it, ++index )
@@ -540,6 +579,18 @@ namespace cereal
         ++itsIteratorStack.back();
       }
 
+      void maybeStartNodeInArray()
+      {
+        if (itsIteratorStack.back().arraySize())
+          startNode();
+      }
+
+      void maybeFinishNodeInArray()
+      {
+        if (itsIteratorStack.size() > 1 && (itsIteratorStack.rbegin() + 1)->arraySize())
+          finishNode();
+      }
+
       //! Retrieves the current node name
       /*! @return nullptr if no name exists */
       const char * getNodeName() const
@@ -612,7 +663,7 @@ namespace cereal
       template <class T> inline
       typename std::enable_if<sizeof(T) == sizeof(std::uint64_t) && !std::is_signed<T>::value, void>::type
       loadLong(T & lu){ loadValue( reinterpret_cast<std::uint64_t&>( lu ) ); }
-            
+
     public:
       //! Serialize a long if it would not be caught otherwise
       template <class T> inline
@@ -655,7 +706,7 @@ namespace cereal
       //! Loads the size for a SizeTag
       void loadSize(size_type & size)
       {
-        size = (itsIteratorStack.rbegin() + 1)->value().Size();
+        size = (itsIteratorStack.rbegin() + 1)->arraySize();
       }
 
       //! @}
@@ -713,39 +764,55 @@ namespace cereal
   // JSONArchive prologue and epilogue functions
   // ######################################################################
 
+  template <typename T>
+     struct is_nvp : std::false_type {};
+  template <typename T>
+     struct is_nvp<NameValuePair<T>> : std::true_type {};
+
+  template <class T, traits::DisableIf<is_nvp<T>::value || traits::is_scalar_or_minimal<T>::value> = traits::sfinae> inline
+  void prologue( NativeJSONOutputArchive &ar, T const & )
+  { ar.maybeStartNodeInArray(); }
+
+  template <class T, traits::DisableIf<is_nvp<T>::value || traits::is_scalar_or_minimal<T>::value> = traits::sfinae> inline
+  void prologue( NativeJSONInputArchive & ar, T const & )
+  { ar.maybeStartNodeInArray(); }
+
+  // ######################################################################
+  template <class T, traits::DisableIf<is_nvp<T>::value || traits::is_scalar_or_minimal<T>::value> = traits::sfinae> inline
+  void epilogue( NativeJSONOutputArchive & ar, T const & )
+  { ar.maybeFinishNodeInArray(); }
+
+  template <class T, traits::DisableIf<is_nvp<T>::value || traits::is_scalar_or_minimal<T>::value> = traits::sfinae> inline
+  void epilogue( NativeJSONInputArchive & ar, T const & )
+  { ar.maybeFinishNodeInArray(); }
+
   // ######################################################################
   //! Prologue for NVPs for JSON archives
   template <class T, traits::DisableIf<traits::is_scalar_or_minimal<T>::value> = traits::sfinae> inline
-  void prologue( NativeJSONOutputArchive &ar, NameValuePair<T> const & t )
+  void prologue( NativeJSONOutputArchive &, NameValuePair<T> const & )
   { }
 
   //! Prologue for NVPs for JSON archives
   template <class T, traits::DisableIf<traits::is_scalar_or_minimal<T>::value> = traits::sfinae> inline
-  void prologue( NativeJSONInputArchive & ar, NameValuePair<T> const & t )
+  void prologue( NativeJSONInputArchive &, NameValuePair<T> const & )
   { }
 
   // ######################################################################
   //! Epilogue for NVPs for JSON archives
-  /*! NVPs do not start or finish nodes - they just set up the names */
   template <class T, traits::DisableIf<traits::is_scalar_or_minimal<T>::value> = traits::sfinae> inline
   void epilogue( NativeJSONOutputArchive & ar, NameValuePair<T> const & )
   { ar.finishNode(); }
 
   //! Epilogue for NVPs for JSON archives
-  /*! NVPs do not start or finish nodes - they just set up the names */
   template <class T, traits::DisableIf<traits::is_scalar_or_minimal<T>::value> = traits::sfinae> inline
   void epilogue( NativeJSONInputArchive & ar, NameValuePair<T> const & )
   { ar.finishNode(); }
 
   // ######################################################################
   //! Prologue for SizeTags for JSON archives
-  /*! SizeTags are strictly ignored for JSON, they just indicate
-      that the current node should be made into an array */
   template <class T> inline
-  void prologue( NativeJSONOutputArchive & ar, SizeTag<T> const & )
-  {
-    ar.makeArray();
-  }
+  void prologue( NativeJSONOutputArchive &, SizeTag<T> const & )
+  { }
 
   //! Prologue for SizeTags for JSON archives
   template <class T> inline
@@ -754,7 +821,6 @@ namespace cereal
 
   // ######################################################################
   //! Epilogue for SizeTags for JSON archives
-  /*! SizeTags are strictly ignored for JSON */
   template <class T> inline
   void epilogue( NativeJSONOutputArchive &, SizeTag<T> const & )
   { }
@@ -828,9 +894,9 @@ namespace cereal
   // ######################################################################
   //! Saving SizeTags to JSON
   template <class T> inline
-  void CEREAL_SAVE_FUNCTION_NAME( NativeJSONOutputArchive &, SizeTag<T> const & )
+  void CEREAL_SAVE_FUNCTION_NAME( NativeJSONOutputArchive & ar, SizeTag<T> const & )
   {
-    // nothing to do here, we don't explicitly save the size
+    ar.startArray();
   }
 
   //! Loading SizeTags from JSON
