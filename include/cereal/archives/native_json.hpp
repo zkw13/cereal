@@ -478,6 +478,16 @@ namespace cereal
             return itsValueItEnd - itsValueItBegin;
           }
 
+          bool atEnd() const
+          {
+            switch (itsType)
+            {
+               case Value: return (long) itsIndex == itsValueItEnd - itsValueItBegin;
+               case Member: return (long) itsIndex == itsMemberItEnd - itsMemberItBegin;
+               default: throw cereal::Exception("Invalid Iterator Type!");
+            }
+          }
+
           //! Get the value of the current node
           GenericValue const & value()
           {
@@ -605,6 +615,11 @@ namespace cereal
       {
         if (itsIteratorStack.size() > 1 && (itsIteratorStack.rbegin() + 1)->arraySize())
           finishNode();
+      }
+
+      bool atEndOfCurrentScope() const
+      {
+        return itsIteratorStack.back().atEnd();
       }
 
       //! Retrieves the current node name
