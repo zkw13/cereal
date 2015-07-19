@@ -407,7 +407,8 @@ namespace cereal
       NativeJSONInputArchive(std::istream & stream) :
         InputArchive<NativeJSONInputArchive>(this),
         itsNextName( nullptr ),
-        itsReadStream(stream)
+        itsReadStream(stream),
+        itsRootElementStarted(false)
       {
         itsDocument.ParseStream<0>(itsReadStream);
         if(itsDocument.IsArray())
@@ -581,6 +582,21 @@ namespace cereal
 
       void maybeStartNodeInArray()
       {
+        // The appropriate type (array or object) for the root element
+        // has already been opened.  This is called in the prologue.
+        // For the root element, the actual 'process'ing of the
+        // element will not have started.  In that case do nothing
+        // here other than mark that the root element is now being
+        // processed.
+        // FIXME: This works for current use cases.  But there's a
+        // FIXME: DisableIf selecting calls to this; need to ensure
+        // FIXME: that this is marked appropriately always -- or a
+        // FIXME: better solution adopted.
+        if (!itsRootElementStarted)
+        {
+          itsRootElementStarted = true;
+          return;
+        }
         if (itsIteratorStack.back().arraySize())
           startNode();
       }
@@ -716,6 +732,7 @@ namespace cereal
       ReadStream itsReadStream;               //!< Rapidjson write stream
       std::vector<Iterator> itsIteratorStack; //!< 'Stack' of rapidJSON iterators
       rapidjson::Document itsDocument;        //!< Rapidjson document
+      bool itsRootElementStarted;             //!< Whether processing of the root element has started
   };
 
   namespace traits
