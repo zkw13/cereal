@@ -489,7 +489,7 @@ namespace cereal
           }
 
           //! Get the value of the current node
-          GenericValue const & value()
+          GenericValue const & value() const
           {
             switch(itsType)
             {
