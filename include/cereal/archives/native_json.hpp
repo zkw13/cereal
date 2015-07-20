@@ -510,10 +510,11 @@ namespace cereal
 
           //! Adjust our position such that we are at the node with the given name
           /*! @throws Exception if no such named node exists */
-          inline void search( const char * searchName )
+          bool search( const char * searchName )
           {
             if( itsType == Value )
-               return;
+              return true;
+
             const auto len = std::strlen( searchName );
             size_t index = 0;
             for( auto it = itsMemberItBegin; it != itsMemberItEnd; ++it, ++index )
@@ -523,11 +524,11 @@ namespace cereal
                   ( std::strlen( currentName ) == len ) )
               {
                 itsIndex = index;
-                return;
+                return true;
               }
             }
 
-            throw Exception("JSON Parsing failed - provided NVP not found");
+            return false;
           }
 
         private:
@@ -546,8 +547,10 @@ namespace cereal
           Resets the NVP name after called.
 
           @throws Exception if an expectedName is given and not found */
-      inline void search()
+      inline bool search()
       {
+        bool ok = true;
+
         // The name an NVP provided with setNextName()
         if( itsNextName )
         {
@@ -556,10 +559,17 @@ namespace cereal
 
           // Do a search if we don't see a name coming up, or if the names don't match
           if( !actualName || std::strcmp( itsNextName, actualName ) != 0 )
-            itsIteratorStack.back().search( itsNextName );
+          {
+            ok = itsIteratorStack.back().search( itsNextName );
+
+            // TODO: if !found && `throw-if-not-found-option`
+            // TODO:   throw Exception("JSON Parsing failed - provided NVP not found");
+          }
         }
 
         itsNextName = nullptr;
+
+        return ok;
       }
 
     public:
@@ -575,7 +585,8 @@ namespace cereal
           that would normally be loaded.  This functionality is provided by search(). */
       void startNode()
       {
-        search();
+        if (!search())
+          return;
 
         if(itsIteratorStack.back().value().IsArray())
           itsIteratorStack.emplace_back(itsIteratorStack.back().value().Begin(), itsIteratorStack.back().value().End());
@@ -640,7 +651,8 @@ namespace cereal
                                           sizeof(T) < sizeof(int64_t)> = traits::sfinae> inline
       void loadValue(T & val)
       {
-        search();
+        if (!search())
+          return;
 
         val = static_cast<T>( itsIteratorStack.back().value().GetInt() );
         ++itsIteratorStack.back();
@@ -652,24 +664,25 @@ namespace cereal
                                           !std::is_same<bool, T>::value> = traits::sfinae> inline
       void loadValue(T & val)
       {
-        search();
+        if (!search())
+          return;
 
         val = static_cast<T>( itsIteratorStack.back().value().GetUint() );
         ++itsIteratorStack.back();
       }
 
       //! Loads a value from the current node - bool overload
-      void loadValue(bool & val)        { search(); val = itsIteratorStack.back().value().GetBool_();   ++itsIteratorStack.back(); }
+      void loadValue(bool & val)        { if (!search()) return; val = itsIteratorStack.back().value().GetBool_(); ++itsIteratorStack.back(); }
       //! Loads a value from the current node - int64 overload
-      void loadValue(int64_t & val)     { search(); val = itsIteratorStack.back().value().GetInt64();  ++itsIteratorStack.back(); }
+      void loadValue(int64_t & val)     { if (!search()) return; val = itsIteratorStack.back().value().GetInt64(); ++itsIteratorStack.back(); }
       //! Loads a value from the current node - uint64 overload
-      void loadValue(uint64_t & val)    { search(); val = itsIteratorStack.back().value().GetUint64(); ++itsIteratorStack.back(); }
+      void loadValue(uint64_t & val)    { if (!search()) return; val = itsIteratorStack.back().value().GetUint64(); ++itsIteratorStack.back(); }
       //! Loads a value from the current node - float overload
-      void loadValue(float & val)       { search(); val = static_cast<float>(itsIteratorStack.back().value().GetDouble()); ++itsIteratorStack.back(); }
+      void loadValue(float & val)       { if (!search()) return; val = static_cast<float>(itsIteratorStack.back().value().GetDouble()); ++itsIteratorStack.back(); }
       //! Loads a value from the current node - double overload
-      void loadValue(double & val)      { search(); val = itsIteratorStack.back().value().GetDouble(); ++itsIteratorStack.back(); }
+      void loadValue(double & val)      { if (!search()) return; val = itsIteratorStack.back().value().GetDouble(); ++itsIteratorStack.back(); }
       //! Loads a value from the current node - string overload
-      void loadValue(std::string & val) { search(); val = itsIteratorStack.back().value().GetString(); ++itsIteratorStack.back(); }
+      void loadValue(std::string & val) { if (!search()) return; val = itsIteratorStack.back().value().GetString(); ++itsIteratorStack.back(); }
 
       // Special cases to handle various flavors of long, which tend to conflict with
       // the int32_t or int64_t on various compiler/OS combinations.  MSVC doesn't need any of this.
