@@ -413,8 +413,10 @@ namespace cereal
         itsDocument.ParseStream<0>(itsReadStream);
         if(itsDocument.IsArray())
           itsIteratorStack.emplace_back(itsDocument.Begin(), itsDocument.End());
-        else
+        else if(itsDocument.IsObject())
           itsIteratorStack.emplace_back(itsDocument.MemberBegin(), itsDocument.MemberEnd());
+        else
+          throw std::runtime_error("Not JSON Array or Object");
       }
 
       //! Loads some binary data, encoded as a base64 string
