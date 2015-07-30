@@ -323,6 +323,8 @@ namespace cereal
         itsNodeStack.top() = NodeType::InArray;
       }
 
+      JSONWriter& writer() { return itsWriter; }
+
       //! @}
 
     private:
