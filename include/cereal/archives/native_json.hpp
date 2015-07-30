@@ -66,7 +66,7 @@ namespace cereal
     enum class NodeType { StartObject, InObject, InArray };
 
     typedef rapidjson::GenericWriteStream WriteStream;
-    typedef rapidjson::PrettyWriter<WriteStream> JSONWriter;
+    typedef rapidjson::Writer<WriteStream> JSONWriter;
 
     public:
       /*! @name Common Functionality
@@ -80,35 +80,16 @@ namespace cereal
           //! Default options
           static Options Default(){ return Options(); }
 
-          //! Default options with no indentation
-          static Options NoIndent(){ return Options( std::numeric_limits<double>::max_digits10, IndentChar::space, 0 ); }
-
-          //! The character to use for indenting
-          enum class IndentChar : char
-          {
-            space = ' ',
-            tab = '\t',
-            newline = '\n',
-            carriage_return = '\r'
-          };
-
           //! Specify specific options for the NativeJSONOutputArchive
           /*! @param precision The precision used for floating point numbers
-              @param indentChar The type of character to indent with
-              @param indentLength The number of indentChar to use for indentation
-                             (0 corresponds to no indentation) */
-          explicit Options( int precision = std::numeric_limits<double>::max_digits10,
-                            IndentChar indentChar = IndentChar::space,
-                            unsigned int indentLength = 4 ) :
-            itsPrecision( precision ),
-            itsIndentChar( static_cast<char>(indentChar) ),
-            itsIndentLength( indentLength ) { }
+           */
+          explicit Options( int precision = std::numeric_limits<double>::max_digits10 )
+             : itsPrecision( precision )
+          { }
 
         private:
           friend class NativeJSONOutputArchive;
           int itsPrecision;
-          char itsIndentChar;
-          unsigned int itsIndentLength;
       };
 
       //! Construct, outputting to the provided stream
@@ -121,7 +102,6 @@ namespace cereal
         itsWriter(itsWriteStream, options.itsPrecision),
         itsNextName(nullptr)
       {
-        itsWriter.SetIndent( options.itsIndentChar, options.itsIndentLength );
         itsNameCounter.push(0);
         itsNodeStack.push(NodeType::StartObject);
       }
