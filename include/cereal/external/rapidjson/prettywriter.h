@@ -99,6 +99,8 @@ public:
 
 	//@}
 
+	template <size_t N>
+	PrettyWriter& String(const Ch str[N]) { return String(str, N - 1); }
 	//! Simpler but slower overload.
 	PrettyWriter& String(const Ch* str) { return String(str, internal::StrLen(str)); }
 

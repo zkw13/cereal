@@ -106,6 +106,8 @@ public:
 	}
 	//@}
 
+	template <size_t N>
+	Writer& String(const Ch str[N]) { return String(str, N - 1); }
 	//! Simpler but slower overload.
 	Writer& String(const Ch* str) { return String(str, internal::StrLen(str)); }
 
