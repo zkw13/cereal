@@ -735,7 +735,11 @@ namespace cereal
       //! Loads the size for a SizeTag
       void loadSize(size_type & size)
       {
-        size = (itsIteratorStack.rbegin() + 1)->arraySize();
+        // XXX: This rbegin+1 looks odd, try to rationalize.
+        if (itsIteratorStack.size() > 1)
+           size = (itsIteratorStack.rbegin() + 1)->arraySize();
+        else if (!itsIteratorStack.empty())
+           size = itsIteratorStack.front().arraySize();
       }
 
       //! @}
