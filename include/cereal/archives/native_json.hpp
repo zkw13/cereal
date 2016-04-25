@@ -30,6 +30,7 @@
 #define CEREAL_ARCHIVES_NATIVE_JSON_HPP_
 
 #include <cereal/archives/json.hpp>
+#include <cereal/types/base_class.hpp>
 
 #include <map>
 #include <type_traits>
@@ -814,6 +815,17 @@ namespace cereal
   template <class T, traits::DisableIf<is_nvp<T>::value || traits::is_scalar_or_minimal<T>::value> = traits::sfinae> inline
   void epilogue( NativeJSONInputArchive & ar, T const & )
   { ar.maybeFinishNodeInArray(); }
+
+  // ######################################################################
+  /*! Since native JSON archives serialize by name, there is no need to finish
+      a base object node as its members are part of the derived object.  */
+  template <class T> inline
+  void epilogue( NativeJSONOutputArchive &, base_class<T> const & )
+  { }
+
+  template <class T> inline
+  void epilogue( NativeJSONInputArchive &, base_class<T> const & )
+  { }
 
   // ######################################################################
   //! Prologue for NVPs for JSON archives
