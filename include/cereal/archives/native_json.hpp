@@ -953,6 +953,11 @@ namespace cereal
 
   // specialized container serialization
 
+  template <typename T> T json_key_to( const char* key ) { return key; }
+  template <typename T> decltype(auto) json_key_from( T&& key ) { return key; }
+  template <> int json_key_to<int>( const char* key ) { return atoi(key); }
+  std::string json_key_from( int key ) { return std::to_string(key); }
+
   //! Saving for standard-like associative types with scalar keys
   template <template <typename...> class Map, typename... Args, typename = typename Map<Args...>::mapped_type>
   inline void save( NativeJSONOutputArchive& ar, Map<Args...> const& map )
@@ -960,7 +965,7 @@ namespace cereal
     static_assert( traits::is_scalar<typename Map<Args...>::key_type>::value,
                    "Map key must be scalar for native JSON serialization" );
     for( auto const& e : map )
-      ar( cereal::make_nvp( e.first, e.second ) );
+      ar( cereal::make_nvp( json_key_from( e.first ), e.second ) );
   }
 
   //! Loading for standard-like associative types with scalar keys
@@ -980,7 +985,7 @@ namespace cereal
       if( !namePtr )
         break;
 
-      typename Map<Args...>::key_type key = namePtr; // FIXME: generalize node-name to scalar
+      auto key = json_key_to<typename Map<Args...>::key_type>( namePtr );
       typename Map<Args...>::mapped_type value; ar( value );
       hint = map.emplace_hint( hint, std::move( key ), std::move( value ) );
     }
