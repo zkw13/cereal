@@ -575,7 +575,7 @@ namespace cereal
 
         if(itsIteratorStack.back().value().IsArray())
           itsIteratorStack.emplace_back(itsIteratorStack.back().value().Begin(), itsIteratorStack.back().value().End());
-        else
+        else if(itsIteratorStack.back().value().IsObject())
           itsIteratorStack.emplace_back(itsIteratorStack.back().value().MemberBegin(), itsIteratorStack.back().value().MemberEnd());
       }
 
