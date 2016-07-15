@@ -463,6 +463,16 @@ namespace cereal
             return itsValueItEnd - itsValueItBegin;
           }
 
+          bool atBegin() const
+          {
+            return itsIndex == 0;
+          }
+
+          bool isValueType() const
+          {
+            return itsType == Value;
+          }
+
           bool atEnd() const
           {
             switch (itsType)
@@ -735,11 +745,13 @@ namespace cereal
       //! Loads the size for a SizeTag
       void loadSize(size_type & size)
       {
-        // XXX: This rbegin+1 looks odd, try to rationalize.
-        if (itsIteratorStack.size() > 1)
-           size = (itsIteratorStack.rbegin() + 1)->arraySize();
-        else if (!itsIteratorStack.empty())
-           size = itsIteratorStack.front().arraySize();
+        auto it = itsIteratorStack.rbegin(), end = itsIteratorStack.rend();
+        while (it != end
+               && !it->isValueType()
+               && it->atBegin())
+          ++it;
+        if (it != end)
+          size = it->arraySize();
       }
 
       //! @}
