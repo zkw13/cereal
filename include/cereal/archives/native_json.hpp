@@ -533,6 +533,7 @@ namespace cereal
           enum Type {Value, Member, Null_} itsType;    //!< Whether this holds values (array) or members (objects) or nothing
       };
 
+    public:
       //! Searches for the expectedName node if it doesn't match the actualName
       /*! This needs to be called before every load or node start occurs.  This function will
           check to see if an NVP has been provided (with setNextName) and if so, see if that name matches the actual
@@ -567,7 +568,6 @@ namespace cereal
         return ok;
       }
 
-    public:
       //! Starts a new node, going into its proper iterator
       /*! This places an iterator for the next node to be parsed onto the iterator stack.  If the next
           node is an array, this will be a value iterator, otherwise it will be a member iterator.
@@ -578,15 +578,19 @@ namespace cereal
 
           If we were given an NVP, we will search for it if it does not match our the name of the next node
           that would normally be loaded.  This functionality is provided by search(). */
-      void startNode()
+      bool startNode()
       {
         if (!search())
-          return;
+          return false;
 
         if(itsIteratorStack.back().value().IsArray())
           itsIteratorStack.emplace_back(itsIteratorStack.back().value().Begin(), itsIteratorStack.back().value().End());
         else if(itsIteratorStack.back().value().IsObject())
           itsIteratorStack.emplace_back(itsIteratorStack.back().value().MemberBegin(), itsIteratorStack.back().value().MemberEnd());
+        else
+          return false;
+
+        return true;
       }
 
       //! Finishes the most recently started node
@@ -625,6 +629,8 @@ namespace cereal
 
       bool atEndOfCurrentScope() const
       {
+        if (itsIteratorStack.empty())
+           return true;
         return itsIteratorStack.back().atEnd();
       }
 
@@ -929,8 +935,15 @@ namespace cereal
   void CEREAL_LOAD_FUNCTION_NAME( NativeJSONInputArchive & ar, NameValuePair<T> & t )
   {
     ar.setNextName( t.name );
-    if (!traits::is_scalar_or_minimal<T>::value)
-       ar.startNode();
+    // Only continue to load the value if the name is found and, if necessary,
+    // a new node (array or object) is started.
+    if (traits::is_scalar_or_minimal<T>::value)
+    {
+       if (!ar.search())
+          return;
+    }
+    else if (!ar.startNode())
+       return;
     ar( t.value );
   }
 
