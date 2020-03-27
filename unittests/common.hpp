@@ -29,6 +29,7 @@
 
 #include <cereal/types/memory.hpp>
 #include <cereal/types/array.hpp>
+#include <cereal/types/atomic.hpp>
 #include <cereal/types/valarray.hpp>
 #include <cereal/types/vector.hpp>
 #include <cereal/types/deque.hpp>
@@ -55,8 +56,11 @@
 #include <limits>
 #include <random>
 
-namespace boost
+#include "doctest.h"
+
+namespace std
 {
+  // Ostream overload for std::pair
   template<class F, class S> inline
   ::std::ostream & operator<<(::std::ostream & os, ::std::pair<F, S> const & p)
   {
@@ -65,14 +69,36 @@ namespace boost
   }
 }
 
-
-namespace cereal
+// Checks that collections have equal size and all elements are the same
+template <class T> inline
+void check_collection( T const & a, T const & b )
 {
-  template <class Archive, class T> inline
-    void serialize( Archive &, std::less<T> & )
-    { }
+  auto aIter = std::begin(a);
+  auto aEnd  = std::end(a);
+  auto bIter = std::begin(b);
+  auto bEnd  = std::end(b);
+
+  CHECK_EQ( std::distance(aIter, aEnd), std::distance(bIter, bEnd) );
+
+  for( ; aIter != aEnd; ++aIter, ++bIter )
+    CHECK_EQ( *aIter, *bIter );
 }
 
+template <class T> inline
+void check_ptr_collection( T const & a, T const & b )
+{
+  auto aIter = std::begin(a);
+  auto aEnd  = std::end(a);
+  auto bIter = std::begin(b);
+  auto bEnd  = std::end(b);
+
+  CHECK_EQ( std::distance(aIter, aEnd), std::distance(bIter, bEnd) );
+
+  for( ; aIter != aEnd; ++aIter, ++bIter )
+    CHECK_EQ( **aIter, **bIter );
+}
+
+// Random Number Generation ===============================================
 template<class T> inline
 typename std::enable_if<std::is_floating_point<T>::value, T>::type
 random_value(std::mt19937 & gen)
@@ -98,6 +124,11 @@ random_value(std::mt19937 & gen)
   return s;
 }
 
+size_t random_index( size_t min, size_t max, std::mt19937 & gen )
+{
+  return std::uniform_int_distribution<size_t>( min, max )(gen);
+}
+
 template<class C> inline
 std::basic_string<C> random_basic_string(std::mt19937 & gen)
 {
@@ -116,6 +147,7 @@ std::string random_binary_string(std::mt19937 & gen)
   return s;
 }
 
+// Generic struct useful for testing many serialization functions
 struct StructBase
 {
   StructBase() {}
@@ -173,7 +205,7 @@ struct StructExternalSerialize : StructBase
   StructExternalSerialize(int x_, int y_) : StructBase{x_,y_} {}
 };
 
-  template<class Archive>
+template<class Archive>
 void serialize(Archive & ar, StructExternalSerialize & s)
 {
   ar(s.x, s.y);
@@ -185,18 +217,17 @@ struct StructExternalSplit : StructBase
   StructExternalSplit(int x_, int y_) : StructBase{x_,y_} {}
 };
 
-  template<class Archive> inline
+template<class Archive> inline
 void save(Archive & ar, StructExternalSplit const & s)
 {
   ar(s.x, s.y);
 }
 
-  template<class Archive> inline
+template<class Archive> inline
 void load(Archive & ar, StructExternalSplit & s)
 {
   ar(s.x, s.y);
 }
-
 
 template<class T>
 struct StructHash {

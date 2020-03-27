@@ -24,30 +24,38 @@
   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
-#include "common.hpp"
-#include <boost/test/unit_test.hpp>
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+#include "portable_binary_archive.hpp"
 
-namespace mynamespace { struct MyCustomClass {}; }
+TEST_SUITE_BEGIN("portable_binary_archive");
 
 #ifdef _MSC_VER
-BOOST_AUTO_TEST_CASE( util )
+TEST_CASE("util")
 {
-  BOOST_CHECK_EQUAL( cereal::util::demangledName<mynamespace::MyCustomClass>(), "struct mynamespace::MyCustomClass" );
+  CHECK_EQ( cereal::util::demangledName<mynamespace::MyCustomClass>(), "struct mynamespace::MyCustomClass" );
 }
 #else
-BOOST_AUTO_TEST_CASE( util )
+TEST_CASE("util")
 {
-  BOOST_CHECK_EQUAL( cereal::util::demangledName<mynamespace::MyCustomClass>(), "mynamespace::MyCustomClass" );
+  CHECK_EQ( cereal::util::demangledName<mynamespace::MyCustomClass>(), "mynamespace::MyCustomClass" );
 }
 #endif
 
-template <class T>
-inline void swapBytes( T & t )
+TEST_CASE("portable_binary_archive_endian_conversions")
 {
-  cereal::portable_binary_detail::swap_bytes<sizeof(T)>( reinterpret_cast<std::uint8_t*>(&t) );
+  // (last parameter is whether we load as little endian)
+  test_endian_serialization<cereal::PortableBinaryInputArchive, cereal::PortableBinaryOutputArchive>(
+      cereal::PortableBinaryInputArchive::Options::BigEndian(), cereal::PortableBinaryOutputArchive::Options::BigEndian(), false );
+  test_endian_serialization<cereal::PortableBinaryInputArchive, cereal::PortableBinaryOutputArchive>(
+      cereal::PortableBinaryInputArchive::Options::LittleEndian(), cereal::PortableBinaryOutputArchive::Options::BigEndian(), true );
+  test_endian_serialization<cereal::PortableBinaryInputArchive, cereal::PortableBinaryOutputArchive>(
+      cereal::PortableBinaryInputArchive::Options::BigEndian(), cereal::PortableBinaryOutputArchive::Options::LittleEndian(), false );
+  test_endian_serialization<cereal::PortableBinaryInputArchive, cereal::PortableBinaryOutputArchive>(
+      cereal::PortableBinaryInputArchive::Options::LittleEndian(), cereal::PortableBinaryOutputArchive::Options::LittleEndian(), true );
 }
 
-BOOST_AUTO_TEST_CASE( portable_binary_archive )
+// Tests the default behavior to swap bytes to current machine's endianness
+TEST_CASE("portable_binary_archive_default_behavior")
 {
   std::random_device rd;
   std::mt19937 gen(rd());
@@ -67,17 +75,7 @@ BOOST_AUTO_TEST_CASE( portable_binary_archive )
     double   o_double = random_value<double>(gen);
 
     // swap the bytes on all of the data
-    swapBytes(o_bool);
-    swapBytes(o_uint8);
-    swapBytes(o_int8);
-    swapBytes(o_uint16);
-    swapBytes(o_int16);
-    swapBytes(o_uint32);
-    swapBytes(o_int32);
-    swapBytes(o_uint64);
-    swapBytes(o_int64);
-    swapBytes(o_float);
-    swapBytes(o_double);
+    CEREAL_TEST_SWAP_OUTPUT
 
     std::ostringstream os;
     {
@@ -99,17 +97,7 @@ BOOST_AUTO_TEST_CASE( portable_binary_archive )
     }
 
     // swap back to original values
-    swapBytes(o_bool);
-    swapBytes(o_uint8);
-    swapBytes(o_int8);
-    swapBytes(o_uint16);
-    swapBytes(o_int16);
-    swapBytes(o_uint32);
-    swapBytes(o_int32);
-    swapBytes(o_uint64);
-    swapBytes(o_int64);
-    swapBytes(o_float);
-    swapBytes(o_double);
+    CEREAL_TEST_SWAP_OUTPUT
 
     bool     i_bool   = false;
     uint8_t  i_uint8  = 0;
@@ -139,17 +127,8 @@ BOOST_AUTO_TEST_CASE( portable_binary_archive )
       iar(i_double);
     }
 
-    BOOST_CHECK_EQUAL(i_bool   , o_bool);
-    BOOST_CHECK_EQUAL(i_uint8  , o_uint8);
-    BOOST_CHECK_EQUAL(i_int8   , o_int8);
-    BOOST_CHECK_EQUAL(i_uint16 , o_uint16);
-    BOOST_CHECK_EQUAL(i_int16  , o_int16);
-    BOOST_CHECK_EQUAL(i_uint32 , o_uint32);
-    BOOST_CHECK_EQUAL(i_int32  , o_int32);
-    BOOST_CHECK_EQUAL(i_uint64 , o_uint64);
-    BOOST_CHECK_EQUAL(i_int64  , o_int64);
-    BOOST_CHECK_CLOSE(i_float  , o_float,  (float)1e-5);
-    BOOST_CHECK_CLOSE(i_double , o_double, 1e-5);
+    CEREAL_TEST_CHECK_EQUAL
   }
 }
 
+TEST_SUITE_END();

@@ -32,6 +32,7 @@
 #include <type_traits>
 #include <string>
 #include <memory>
+#include <functional>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -39,10 +40,10 @@
 #include <cstdint>
 #include <functional>
 
-#include <cereal/macros.hpp>
-#include <cereal/details/traits.hpp>
-#include <cereal/details/helpers.hpp>
-#include <cereal/types/base_class.hpp>
+#include "cereal/macros.hpp"
+#include "cereal/details/traits.hpp"
+#include "cereal/details/helpers.hpp"
+#include "cereal/types/base_class.hpp"
 
 namespace cereal
 {
@@ -93,10 +94,63 @@ namespace cereal
 
       @relates SizeTag
       @ingroup Utility */
-  template <class T>
+  template <class T> inline
   SizeTag<T> make_size_tag( T && sz )
   {
     return {std::forward<T>(sz)};
+  }
+
+  // ######################################################################
+  //! Marks data for deferred serialization
+  /*! cereal performs a recursive depth-first traversal of data it serializes. When
+      serializing smart pointers to large, nested, or cyclical data structures, it
+      is possible to encounter a stack overflow from excessive recursion when following
+      a chain of pointers.
+
+      Deferment can help in these situations if the data can be serialized separately from
+      the pointers used to traverse the structure. For example, a graph structure can have its
+      nodes serialized before its edges:
+
+      @code{.cpp}
+      struct MyEdge
+      {
+        std::shared_ptr<MyNode> connection;
+        int some_value;
+
+        template<class Archive>
+        void serialize(Archive & archive)
+        {
+          // when we serialize an edge, we'll defer serializing the associated node
+          archive( cereal::defer( connection ),
+                   some_value );
+        }
+      };
+
+      struct MyGraphStructure
+      {
+        std::vector<MyEdge> edges;
+        std::vector<MyNodes> nodes;
+
+        template<class Archive>
+        void serialize(Archive & archive)
+        {
+          // because of the deferment, we ensure all nodes are fully serialized
+          // before any connection pointers to those nodes are serialized
+          archive( edges, nodes );
+
+          // we have to explicitly inform the archive when it is safe to serialize
+          // the deferred data
+          archive.serializeDeferments();
+        }
+      };
+      @endcode
+
+      @relates DeferredData
+      @ingroup Utility */
+  template <class T> inline
+  DeferredData<T> defer( T && value )
+  {
+    return {std::forward<T>(value)};
   }
 
   // ######################################################################
@@ -106,14 +160,14 @@ namespace cereal
       state or output extra information for a type, specialize this function
       for the archive type and the types that require the extra information.
       @ingroup Internal */
-  template <class Archive, class T>
+  template <class Archive, class T> inline
   void prologue( Archive & /* archive */, T const & /* data */)
   { }
 
   //! Called after a type is serialized to tear down any special archive state
   //! for processing some type
   /*! @ingroup Internal */
-  template <class Archive, class T>
+  template <class Archive, class T> inline
   void epilogue( Archive & /* archive */, T const & /* data */)
   { }
 
@@ -146,6 +200,14 @@ namespace cereal
   typename polymorphic_serialization_support<Archive, T>::type          \
   instantiate_polymorphic_binding( T*, Archive*, BindingTag, adl_tag ); \
   } } /* end namespaces */
+
+  //! Helper macro to omit unused warning
+  #if defined(__GNUC__)
+    // GCC / clang don't want the function
+    #define CEREAL_UNUSED_FUNCTION
+  #else
+    #define CEREAL_UNUSED_FUNCTION static void unused() { (void)version; }
+  #endif
 
   // ######################################################################
   //! Defines a class version for some type
@@ -209,7 +271,7 @@ namespace cereal
              std::type_index(typeid(TYPE)).hash_code(), VERSION_NUMBER );        \
         return VERSION_NUMBER;                                                   \
       }                                                                          \
-      static void unused() { (void)version; }                                    \
+      CEREAL_UNUSED_FUNCTION                                                     \
     }; /* end Version */                                                         \
     const std::uint32_t Version<TYPE>::version =                                 \
       Version<TYPE>::registerVersion();                                          \
@@ -252,10 +314,32 @@ namespace cereal
         return *self;
       }
 
+      //! Serializes any data marked for deferment using defer
+      /*! This will cause any data wrapped in DeferredData to be immediately serialized */
+      void serializeDeferments()
+      {
+        for( auto & deferment : itsDeferments )
+          deferment();
+      }
+
       /*! @name Boost Transition Layer
           Functionality that mirrors the syntax for Boost.  This is useful if you are transitioning
           a large project from Boost to cereal.  The preferred interface for cereal is using operator(). */
       //! @{
+
+      //! Indicates this archive is not intended for loading
+      /*! This ensures compatibility with boost archive types.  If you are transitioning
+          from boost, you can check this value within a member or external serialize function
+          (i.e., Archive::is_loading::value) to disable behavior specific to loading, until
+          you can transition to split save/load or save_minimal/load_minimal functions */
+      using is_loading = std::false_type;
+
+      //! Indicates this archive is intended for saving
+      /*! This ensures compatibility with boost archive types.  If you are transitioning
+          from boost, you can check this value within a member or external serialize function
+          (i.e., Archive::is_saving::value) to enable behavior specific to loading, until
+          you can transition to split save/load or save_minimal/load_minimal functions */
+      using is_saving = std::true_type;
 
       //! Serializes passed in data
       /*! This is a boost compatability layer and is not the preferred way of using
@@ -367,6 +451,17 @@ namespace cereal
         return *self;
       }
 
+      std::vector<std::function<void(void)>> itsDeferments;
+
+      template <class T> inline
+      ArchiveType & processImpl(DeferredData<T> const & d)
+      {
+        std::function<void(void)> deferment( [=](){ self->process( d.value ); } );
+        itsDeferments.emplace_back( std::move(deferment) );
+
+        return *self;
+      }
+
       //! Helper macro that expands the requirements for activating an overload
       /*! Requirements:
             Has the requested serialization function
@@ -471,13 +566,13 @@ namespace cereal
       /*! If this is the first time this class has been serialized, we will record its
           version number and serialize that.
 
-          @tparam T The type of the class being serialized
-          @param version The version number associated with it */
+          @tparam T The type of the class being serialized */
       template <class T> inline
       std::uint32_t registerClassVersion()
       {
         static const auto hash = std::type_index(typeid(T)).hash_code();
         const auto insertResult = itsVersionedTypes.insert( hash );
+        const auto lock = detail::StaticObject<detail::Versions>::lock();
         const auto version =
           detail::StaticObject<detail::Versions>::getInstance().find( hash, detail::Version<T>::version );
 
@@ -607,10 +702,32 @@ namespace cereal
         return *self;
       }
 
+      //! Serializes any data marked for deferment using defer
+      /*! This will cause any data wrapped in DeferredData to be immediately serialized */
+      void serializeDeferments()
+      {
+        for( auto & deferment : itsDeferments )
+          deferment();
+      }
+
       /*! @name Boost Transition Layer
           Functionality that mirrors the syntax for Boost.  This is useful if you are transitioning
           a large project from Boost to cereal.  The preferred interface for cereal is using operator(). */
       //! @{
+
+      //! Indicates this archive is intended for loading
+      /*! This ensures compatibility with boost archive types.  If you are transitioning
+          from boost, you can check this value within a member or external serialize function
+          (i.e., Archive::is_loading::value) to enable behavior specific to loading, until
+          you can transition to split save/load or save_minimal/load_minimal functions */
+      using is_loading = std::true_type;
+
+      //! Indicates this archive is not intended for saving
+      /*! This ensures compatibility with boost archive types.  If you are transitioning
+          from boost, you can check this value within a member or external serialize function
+          (i.e., Archive::is_saving::value) to disable behavior specific to loading, until
+          you can transition to split save/load or save_minimal/load_minimal functions */
+      using is_saving = std::false_type;
 
       //! Serializes passed in data
       /*! This is a boost compatability layer and is not the preferred way of using
@@ -640,6 +757,7 @@ namespace cereal
       /*! This is used to retrieve a previously registered shared_ptr
           which has already been loaded.
 
+          @internal
           @param id The unique id that was serialized for the pointer
           @return A shared pointer to the data
           @throw Exception if the id does not exist */
@@ -658,6 +776,7 @@ namespace cereal
       /*! After a shared pointer has been allocated for the first time, it should
           be registered with its loaded id for future references to it.
 
+          @internal
           @param id The unique identifier for the shared pointer
           @param ptr The actual shared pointer */
       inline void registerSharedPointer(std::uint32_t const id, std::shared_ptr<void> ptr)
@@ -670,6 +789,7 @@ namespace cereal
       /*! This is used to retrieve a string previously registered during
           a polymorphic load.
 
+          @internal
           @param id The unique id that was serialized for the polymorphic type
           @return The string identifier for the tyep */
       inline std::string getPolymorphicName(std::uint32_t const id)
@@ -686,6 +806,7 @@ namespace cereal
       /*! After a polymorphic type has been loaded for the first time, it should
           be registered with its loaded id for future references to it.
 
+          @internal
           @param id The unique identifier for the polymorphic type
           @param name The name associated with the tyep */
       inline void registerPolymorphicName(std::uint32_t const id, std::string const & name)
@@ -732,6 +853,17 @@ namespace cereal
       ArchiveType & processImpl(base_class<T> & b)
       {
         self->processImpl( *b.base_ptr );
+        return *self;
+      }
+
+      std::vector<std::function<void(void)>> itsDeferments;
+
+      template <class T> inline
+      ArchiveType & processImpl(DeferredData<T> const & d)
+      {
+        std::function<void(void)> deferment( [=](){ self->process( d.value ); } );
+        itsDeferments.emplace_back( std::move(deferment) );
+
         return *self;
       }
 
@@ -841,12 +973,14 @@ namespace cereal
         return *self;
       }
 
+      //! Befriend for versioning in load_and_construct
+      template <class A, class B, bool C, bool D, bool E, bool F> friend struct detail::Construct;
+
       //! Registers a class version with the archive and serializes it if necessary
       /*! If this is the first time this class has been serialized, we will record its
           version number and serialize that.
 
-          @tparam T The type of the class being serialized
-          @param version The version number associated with it */
+          @tparam T The type of the class being serialized */
       template <class T> inline
       std::uint32_t loadClassVersion()
       {
@@ -952,6 +1086,6 @@ namespace cereal
 } // namespace cereal
 
 // This include needs to come after things such as binary_data, make_nvp, etc
-#include <cereal/types/common.hpp>
+#include "cereal/types/common.hpp"
 
 #endif // CEREAL_CEREAL_HPP_

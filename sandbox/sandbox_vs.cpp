@@ -125,10 +125,12 @@ namespace cereal
 struct A
 {
   virtual void foo() = 0;
+  virtual ~A() {}
 };
 
 struct B : A
 {
+  virtual ~B() {}
   void foo() {}
 
   template <class Archive>
@@ -144,6 +146,7 @@ struct C
 };
 
 CEREAL_REGISTER_TYPE(B)
+CEREAL_REGISTER_POLYMORPHIC_RELATION(A, B)
 
 class MemberMinimal
 {
