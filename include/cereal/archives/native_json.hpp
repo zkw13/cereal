@@ -66,8 +66,8 @@ namespace cereal
   {
     enum class NodeType { StartObject, InObject, InArray };
 
-    typedef rapidjson::GenericWriteStream WriteStream;
-    typedef rapidjson::Writer<WriteStream> JSONWriter;
+    using WriteStream = CEREAL_RAPIDJSON_NAMESPACE::OStreamWrapper;
+    using JSONWriter = CEREAL_RAPIDJSON_NAMESPACE::PrettyWriter<WriteStream>;
 
     public:
       /*! @name Common Functionality
@@ -100,9 +100,10 @@ namespace cereal
       NativeJSONOutputArchive(std::ostream & stream, Options const & options = Options::Default() ) :
         OutputArchive<NativeJSONOutputArchive>(this),
         itsWriteStream(stream),
-        itsWriter(itsWriteStream, options.itsPrecision),
+        itsWriter(itsWriteStream),
         itsNextName(nullptr)
       {
+        itsWriter.SetMaxDecimalPlaces( options.itsPrecision );
         itsNameCounter.push(0);
         itsNodeStack.push(NodeType::StartObject);
       }
@@ -205,7 +206,7 @@ namespace cereal
       }
 
       //! Saves a bool to the current node
-      void saveValue(bool b)                { itsWriter.Bool_(b);                                                         }
+      void saveValue(bool b)                { itsWriter.Bool(b);                                                         }
       //! Saves an int to the current node
       void saveValue(int i)                 { itsWriter.Int(i);                                                          }
       //! Saves a uint to the current node
@@ -220,6 +221,8 @@ namespace cereal
       void saveValue(std::string const & s) { itsWriter.String(s.c_str(), static_cast<rapidjson::SizeType>( s.size() )); }
       //! Saves a const char * to the current node
       void saveValue(char const * s)        { itsWriter.String(s);                                                       }
+      //! Saves a nullptr to the current node
+      void saveValue(std::nullptr_t)        { itsWriter.Null();                                                          }
 
     private:
       // Some compilers/OS have difficulty disambiguating the above for various flavors of longs, so we provide
@@ -374,11 +377,11 @@ namespace cereal
   class NativeJSONInputArchive : public InputArchive<NativeJSONInputArchive>, public traits::TextArchive
   {
     private:
-      typedef rapidjson::GenericReadStream ReadStream;
-      typedef rapidjson::GenericValue<rapidjson::UTF8<>> JSONValue;
+      using ReadStream = CEREAL_RAPIDJSON_NAMESPACE::IStreamWrapper;
+      typedef CEREAL_RAPIDJSON_NAMESPACE::GenericValue<CEREAL_RAPIDJSON_NAMESPACE::UTF8<>> JSONValue;
       typedef JSONValue::ConstMemberIterator MemberIterator;
       typedef JSONValue::ConstValueIterator ValueIterator;
-      typedef rapidjson::Document::GenericValue GenericValue;
+      typedef CEREAL_RAPIDJSON_NAMESPACE::Document::GenericValue GenericValue;
 
     public:
       /*! @name Common Functionality
@@ -673,7 +676,7 @@ namespace cereal
       }
 
       //! Loads a value from the current node - bool overload
-      void loadValue(bool & val)        { if (!search()) return; val = itsIteratorStack.back().value().GetBool_(); ++itsIteratorStack.back(); }
+      void loadValue(bool & val)        { if (!search()) return; val = itsIteratorStack.back().value().GetBool(); ++itsIteratorStack.back(); }
       //! Loads a value from the current node - int64 overload
       void loadValue(int64_t & val)     { if (!search()) return; val = itsIteratorStack.back().value().GetInt64(); ++itsIteratorStack.back(); }
       //! Loads a value from the current node - uint64 overload
@@ -684,6 +687,8 @@ namespace cereal
       void loadValue(double & val)      { if (!search()) return; val = itsIteratorStack.back().value().GetDouble(); ++itsIteratorStack.back(); }
       //! Loads a value from the current node - string overload
       void loadValue(std::string & val) { if (!search()) return; val = itsIteratorStack.back().value().GetString(); ++itsIteratorStack.back(); }
+      //! Loads a nullptr from the current node
+      void loadValue(std::nullptr_t&)   { search(); CEREAL_RAPIDJSON_ASSERT(itsIteratorStack.back().value().IsNull()); ++itsIteratorStack.back(); }
 
       // Special cases to handle various flavors of long, which tend to conflict with
       // the int32_t or int64_t on various compiler/OS combinations.  MSVC doesn't need any of this.
