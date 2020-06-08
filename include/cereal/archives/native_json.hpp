@@ -600,7 +600,8 @@ namespace cereal
       void finishNode()
       {
         itsIteratorStack.pop_back();
-        ++itsIteratorStack.back();
+        if (!itsIteratorStack.empty())
+           ++itsIteratorStack.back();
       }
 
       void maybeStartNodeInArray()
