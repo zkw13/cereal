@@ -984,10 +984,10 @@ namespace cereal
 
   // specialized container serialization
 
-  template <typename T> T json_key_to( const char* key ) { return key; }
-  template <typename T> decltype(auto) json_key_from( T&& key ) { return key; }
-  template <> int json_key_to<int>( const char* key ) { return atoi(key); }
-  std::string json_key_from( int key ) { return std::to_string(key); }
+  template <typename T> inline T json_key_to( const char* key ) { return key; }
+  template <typename T> inline decltype(auto) json_key_from( T&& key ) { return key; }
+  template <> inline int json_key_to<int>( const char* key ) { return atoi(key); }
+  inline std::string json_key_from( int key ) { return std::to_string(key); }
 
   //! Saving for standard-like associative types with scalar keys
   template <template <typename...> class Map, typename... Args, typename = typename Map<Args...>::mapped_type>
