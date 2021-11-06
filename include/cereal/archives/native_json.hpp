@@ -513,20 +513,29 @@ namespace cereal
             if( itsType == Value )
               return true;
 
+            int index = findName( searchName );
+            if( index >= 0 )
+            {
+              itsIndex = index;
+              return true;
+            }
+
+            return false;
+          }
+
+          int findName( const char * searchName ) const
+          {
             const auto len = std::strlen( searchName );
-            size_t index = 0;
+            int index = 0;
             for( auto it = itsMemberItBegin; it != itsMemberItEnd; ++it, ++index )
             {
               const auto currentName = it->name.GetString();
               if( ( std::strncmp( searchName, currentName, len ) == 0 ) &&
                   ( std::strlen( currentName ) == len ) )
-              {
-                itsIndex = index;
-                return true;
-              }
+                return index;
             }
 
-            return false;
+            return -1;
           }
 
         private:
@@ -569,6 +578,25 @@ namespace cereal
         itsNextName = nullptr;
 
         return ok;
+      }
+
+      /// As per search but doesn't mutate anything; can be used to check for optional/unordered fields in a loader.
+      inline bool hasName( const char* name ) const
+      {
+        // The name an NVP provided with setNextName()
+        if( name && !itsIteratorStack.empty() )
+        {
+          // The actual name of the current node
+          auto const actualName = itsIteratorStack.back().name();
+
+          // Do a search if we don't see a name coming up, or if the names don't match
+          if( !actualName || std::strcmp( name, actualName ) != 0 )
+            return itsIteratorStack.back().findName( name ) >= 0;
+
+          return true;
+        }
+
+        return false;
       }
 
       //! Starts a new node, going into its proper iterator

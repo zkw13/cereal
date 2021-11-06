@@ -70,8 +70,33 @@ namespace cereal
   /*! @relates NameValuePair
       @ingroup Utility */
   #define CEREAL_NVP(T) ::cereal::make_nvp(#T, T)
-  #define CEREAL_ONVP(O,N) ::cereal::make_nvp(#N, O.N)
+  #define CEREAL_ONVP(O,N) ::cereal::make_nvp(#N, (O).N)
   #define CEREAL_PNVP(P,N) ::cereal::make_nvp(#N, P ## N)
+
+  /// <summary>
+  /// Save/Load an NVP if its name is located inside the text archive
+  /// Returns TRUE if the value is loaded or saved
+  /// </summary>
+  template <typename Archive, typename T>
+  bool make_optional_nvp( Archive& ar, const char* name, T&& value )
+  {
+    constexpr bool isTextArchive = traits::is_text_archive<Archive>::value;
+    constexpr bool isInputArchive = std::is_base_of_v<InputArchive<Archive>, Archive>;
+
+    if constexpr( isTextArchive && isInputArchive )
+    {
+      if( !ar.hasName( name ) )
+        return false;
+    }
+
+    ar( make_nvp( name, std::forward<T>(value) ) );
+
+    return true;
+  }
+
+  #define CEREAL_OPTIONAL_NVP(ar, N) ::cereal::make_optional_nvp(ar, #N, N)
+  #define CEREAL_OPTIONAL_ONVP(ar, O, N) ::cereal::make_optional_nvp(ar, #N, (O).N)
+  #define CEREAL_OPTIONAL_PNVP(ar, P, N) ::cereal::make_optional_nvp(ar, #N, P ## N)
 
   // ######################################################################
   //! Convenience function to create binary data for both const and non const pointers
