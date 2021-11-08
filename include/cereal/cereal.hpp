@@ -81,7 +81,7 @@ namespace cereal
   bool make_optional_nvp( Archive& ar, const char* name, T&& value )
   {
     constexpr bool isTextArchive = traits::is_text_archive<Archive>::value;
-    constexpr bool isInputArchive = std::is_base_of_v<InputArchive<Archive>, Archive>;
+    constexpr bool isInputArchive = std::is_base_of_v<detail::InputArchiveBase, Archive>;
 
     if constexpr( isTextArchive && isInputArchive )
     {
