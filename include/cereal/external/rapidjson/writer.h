@@ -254,10 +254,12 @@ public:
     /*! @name Convenience extensions */
     //@{
 
+    template <size_t N>
+    bool String(const Ch str[N]) { return String(str, N - 1); }
     //! Simpler but slower overload.
     bool String(const Ch* const& str) { return String(str, internal::StrLen(str)); }
     bool Key(const Ch* const& str) { return Key(str, internal::StrLen(str)); }
-    
+
     //@}
 
     //! Write a raw JSON value.
