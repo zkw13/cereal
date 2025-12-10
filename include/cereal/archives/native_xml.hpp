@@ -462,7 +462,10 @@ namespace cereal
         startNode();
 
         if (nameNotFound)
+        {
+          finishNode();
           return;
+        }
 
         std::string encoded;
         loadValue( encoded );
