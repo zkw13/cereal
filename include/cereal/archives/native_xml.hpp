@@ -188,8 +188,12 @@ namespace cereal
       //! Destructor, flushes the XML
       ~NativeXMLOutputArchive() CEREAL_NOEXCEPT
       {
-        const int flags = itsIndent ? 0x0 : rapidxml::print_no_indenting;
-        rapidxml::print( itsStream, itsXML, flags );
+        try
+        {
+          const int flags = itsIndent ? 0x0 : rapidxml::print_no_indenting;
+          rapidxml::print( itsStream, itsXML, flags );
+        }
+        catch( ... ) { }
         itsXML.clear();
       }
 
